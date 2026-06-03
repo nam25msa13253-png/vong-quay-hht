@@ -576,6 +576,161 @@ const TOTAL_NUMBERS = 400;
 const ROUNDS = 5;
 const PER_ROUND = 15;
 
+// ── Audio Engine (Web Audio API – không cần file ngoài) ────────────────────
+let audioCtx = null;
+
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+// Tiếng "tick" mỗi lần số thay đổi
+function playTick(pitch = 880, vol = 0.18) {
+  try {
+    const ctx = getAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(pitch, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(pitch * 0.5, ctx.currentTime + 0.04);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.07);
+  } catch(e) {}
+}
+
+// Trống lăn liên tục trong lúc quay (gọi lặp lại)
+let drumInterval = null;
+let drumSpeed = 80;
+
+function startDrum() {
+  drumSpeed = 55;
+  let beat = 0;
+  drumInterval = setInterval(() => {
+    const pitches = [200, 180, 220, 160];
+    playDrum(pitches[beat % 4], beat % 4 === 0 ? 0.5 : 0.3);
+    beat++;
+  }, drumSpeed);
+}
+
+function slowDrum() {
+  // Làm chậm trống dần dần
+  clearInterval(drumInterval);
+  drumSpeed = 120;
+  let beat = 0; let count = 0;
+  const slowInterval = setInterval(() => {
+    const pitches = [200, 180, 220, 160];
+    playDrum(pitches[beat % 4], beat % 4 === 0 ? 0.5 : 0.25);
+    beat++; count++;
+    drumSpeed += 25;
+    clearInterval(slowInterval);
+    if (count < 8) {
+      setTimeout(() => {
+        const si2 = setInterval(() => {
+          playDrum(200, 0.4);
+          clearInterval(si2);
+        }, drumSpeed);
+      }, drumSpeed);
+    }
+  }, drumSpeed);
+}
+
+function stopDrum() {
+  clearInterval(drumInterval);
+  drumInterval = null;
+}
+
+function playDrum(freq = 200, vol = 0.4) {
+  try {
+    const ctx = getAudio();
+    // Bass drum sound
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.13);
+
+    // Snare noise layer
+    const bufferSize = ctx.sampleRate * 0.05;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const ng = ctx.createGain();
+    noise.connect(ng); ng.connect(ctx.destination);
+    ng.gain.setValueAtTime(vol * 0.4, ctx.currentTime);
+    ng.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    noise.start(ctx.currentTime);
+    noise.stop(ctx.currentTime + 0.05);
+  } catch(e) {}
+}
+
+// Nhạc chiến thắng khi lộ 15 số
+function playFanfare() {
+  try {
+    const ctx = getAudio();
+    // Melody: Sol-Sol-Sol-Mi-Do (kiểu thắng lợi)
+    const notes = [
+      {f:523, t:0,    d:0.15},
+      {f:659, t:0.15, d:0.15},
+      {f:784, t:0.30, d:0.25},
+      {f:659, t:0.55, d:0.12},
+      {f:784, t:0.67, d:0.5},
+      {f:1047,t:1.17, d:0.5},
+    ];
+    notes.forEach(({f, t, d}) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0, ctx.currentTime + t);
+      gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + t + 0.02);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + t + d - 0.03);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + t + d);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + d + 0.05);
+    });
+
+    // Chord hit at start
+    [523, 659, 784].forEach(f => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.35);
+    });
+  } catch(e) {}
+}
+
+// Tiếng "ding" khi mỗi số chip hiện ra
+function playChipSound(i) {
+  try {
+    const ctx = getAudio();
+    const delay = i * 0.06;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600 + i * 30, ctx.currentTime + delay);
+    osc.frequency.exponentialRampToValueAtTime(900 + i * 20, ctx.currentTime + delay + 0.08);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
+    osc.start(ctx.currentTime + delay);
+    osc.stop(ctx.currentTime + delay + 0.2);
+  } catch(e) {}
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let state = loadState();
 let spinning = false;
@@ -633,6 +788,9 @@ function doSpin() {
   disp.classList.add('rolling');
   label.textContent = 'Đang quay...';
 
+  // Bắt đầu trống lăn
+  startDrum();
+
   // Rolling phase: flash random numbers for ~3.5s
   const winners = pick15(available);
   let tick = 0;
@@ -641,11 +799,15 @@ function doSpin() {
   const rollInterval = setInterval(() => {
     const r = available[Math.floor(Math.random() * available.length)];
     disp.textContent = String(r).padStart(3, '0');
+    // Tiếng tick tăng pitch dần cuối
+    const progress = tick / totalTicks;
+    playTick(400 + progress * 600, 0.12 + progress * 0.1);
     tick++;
 
     // Slow down near end
     if (tick >= totalTicks) {
       clearInterval(rollInterval);
+      stopDrum();
       ring.classList.remove('spinning');
       disp.classList.remove('rolling');
 
@@ -714,6 +876,8 @@ function showResultModal() {
 
   document.getElementById('resultModal').classList.add('show');
   launchConfetti();
+  playFanfare();
+  nums.forEach((_, i) => playChipSound(i));
 }
 
 function closeModalAndNext() {
